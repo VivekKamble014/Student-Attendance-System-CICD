@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: attendance_mysql
+    restart: always
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-attendance_db}
+      MYSQL_USER: ${MYSQL_USER:-attendance_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-attendance_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - attendance_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: attendance_app
+    restart: always
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-attendance_user}:${MYSQL_PASSWORD:-attendance_password}@mysql:3306/${MYSQL_DATABASE:-attendance_db}
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      HOSTNAME: ${HOSTNAME:-0.0.0.0}
+    depends_on:
+      - mysql
+    networks:
+      - attendance_network
+    command: sh -c "npx prisma migrate deploy && npm start"
+
+volumes:
+  mysql_data:
+
+networks:
+  attendance_network:
+    driver: bridge
+
