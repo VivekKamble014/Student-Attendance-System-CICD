@@ -644,7 +644,7 @@ pipeline {
                             exit 0
                         fi
                         
-                        echo "✅ Docker found: $(docker --version)"
+                        echo "✅ Docker found: \$(docker --version)"
                         echo "🚀 Building: ${DOCKER_IMAGE}:${DOCKER_TAG}"
                         
                         docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
