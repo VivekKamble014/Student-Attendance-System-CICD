@@ -70,9 +70,9 @@ pipeline {
                         if [ -x "$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
                             export PATH="$HOME/.nvm/versions/node/v18.20.8/bin:$PATH"
                         elif [ -d "$HOME/.nvm/versions/node" ]; then
-                            FOUND_NODE=$(find "$HOME/.nvm/versions/node" -name "node" -type f -executable 2>/dev/null | head -1)
+                            FOUND_NODE=\$(find "$HOME/.nvm/versions/node" -name "node" -type f -executable 2>/dev/null | head -1)
                             if [ -n "$FOUND_NODE" ]; then
-                                export PATH="$(dirname $FOUND_NODE):$PATH"
+                                export PATH="\$(dirname \$FOUND_NODE):\$PATH"
                             fi
                         fi
                         
@@ -81,8 +81,8 @@ pipeline {
                             exit 1
                         fi
                         
-                        echo "✅ Node.js: $(node --version)"
-                        echo "✅ npm: $(npm --version)"
+                        echo "✅ Node.js: \$(node --version)"
+                        echo "✅ npm: \$(npm --version)"
                         
                         # Install Dependencies
                         echo "📦 Installing dependencies..."
@@ -162,7 +162,7 @@ pipeline {
                                     fi
                                     
                                     rm -f ${SONAR_SCANNER_ZIP}
-                                    export PATH=$PATH:$(pwd)/sonar-scanner-${SONAR_SCANNER_VERSION}-linux/bin
+                                    export PATH=\$PATH:\$(pwd)/sonar-scanner-${SONAR_SCANNER_VERSION}-linux/bin
                                 fi
                                 
                                 # Run SonarQube Analysis
@@ -434,13 +434,13 @@ EOF
                         RETRY_COUNT=0
                         
                         while [ -z "$EXTERNAL_IP" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-                            EXTERNAL_IP=$(kubectl get svc ${DOCKER_IMAGE}-service -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+                            EXTERNAL_IP=\$(kubectl get svc ${DOCKER_IMAGE}-service -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
                             if [ -z "$EXTERNAL_IP" ]; then
-                                EXTERNAL_IP=$(kubectl get svc ${DOCKER_IMAGE}-service -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+                                EXTERNAL_IP=\$(kubectl get svc ${DOCKER_IMAGE}-service -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
                             fi
                             if [ -z "$EXTERNAL_IP" ]; then
-                                RETRY_COUNT=$((RETRY_COUNT + 1))
-                                echo "   Waiting for external IP... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+                                RETRY_COUNT=\$((RETRY_COUNT + 1))
+                                echo "   Waiting for external IP... (attempt \$RETRY_COUNT/\$MAX_RETRIES)"
                         sleep 5
                             fi
                         done
