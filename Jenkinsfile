@@ -494,10 +494,11 @@ EOF
                         echo ""
                         if [ -n "$EXTERNAL_IP" ]; then
                             # Check if it's an IP address (simplified check to avoid regex issues)
-                            if echo "$EXTERNAL_IP" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
-                                APP_URL="http://${EXTERNAL_IP}"
+                            # Use a simple check that doesn't require complex regex patterns
+                            if echo "\$EXTERNAL_IP" | grep -q '^[0-9]'; then
+                                APP_URL="http://\${EXTERNAL_IP}"
                             else
-                                APP_URL="http://${EXTERNAL_IP}"
+                                APP_URL="http://\${EXTERNAL_IP}"
                             fi
                             echo "   🔗 ${APP_URL}"
                             echo ""
