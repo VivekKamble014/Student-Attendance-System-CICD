@@ -312,6 +312,25 @@ pipeline {
                             }
                             
                             echo "✅ Registry secret 'nexus-registry-secret' created"
+                        """
+                    }
+                }
+            }
+        }
+        
+        // Stage 7c: Create Application Secrets
+        stage('Create Application Secrets') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo '🔐 Creating application secrets...'
+                script {
+                    sh """
+                        if ! command -v kubectl &> /dev/null; then
+                            echo "⚠️ kubectl not found - skipping application secrets"
+                            exit 0
+                        fi
                         
                         # Create application secrets with actual values
                         echo "📝 Creating application secrets with actual values..."
