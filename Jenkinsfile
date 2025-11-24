@@ -320,18 +320,21 @@ pipeline {
                         echo "🔍 Node.js not in PATH, checking common locations..."
                         if [ -f "$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
                             export PATH="$HOME/.nvm/versions/node/v18.20.8/bin:$PATH"
+                            hash -r 2>/dev/null || true
                             echo "✅ Found Node.js at $HOME/.nvm/versions/node/v18.20.8/bin"
                         elif [ -d "$HOME/.nvm/versions/node" ]; then
                             # Find any Node.js version
                             NODE_PATH=$(find "$HOME/.nvm/versions/node" -name "node" -type f 2>/dev/null | head -1)
                             if [ -n "$NODE_PATH" ]; then
                                 export PATH="$(dirname $NODE_PATH):$PATH"
+                                hash -r 2>/dev/null || true
                                 echo "✅ Found Node.js at: $NODE_PATH"
                             fi
                         fi
                     fi
                     
-                    # Verify Node.js is available
+                    # Refresh command cache and verify Node.js is available
+                    hash -r 2>/dev/null || true
                     if ! command -v node &> /dev/null; then
                         echo ""
                         echo "❌ ERROR: Node.js is not available!"
@@ -425,7 +428,7 @@ pipeline {
                 script {
                     withSonarQubeEnv('SonarQube') {
                         withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
-                            sh '''
+                        sh '''
                                 # Find SonarQube Scanner (from Install Tools stage or system)
                                 SCANNER_CMD=""
                                 
@@ -522,9 +525,9 @@ pipeline {
                                 echo ""
                                 
                                 ${SCANNER_CMD} \
-                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                    -Dsonar.host.url=${SONAR_HOST_URL} \
-                                    -Dsonar.login=${SONAR_TOKEN} \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.host.url=${SONAR_HOST_URL} \
+                                -Dsonar.login=${SONAR_TOKEN} \
                                     -Dsonar.projectName="Student Attendance Management System - ${SONAR_PROJECT_KEY}" \
                                     -Dsonar.projectVersion=1.0.0 \
                                     -Dsonar.sourceEncoding=UTF-8 \
@@ -570,7 +573,7 @@ pipeline {
                 echo "📊 ========================================"
                 echo ""
                 script {
-                    timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 5, unit: 'MINUTES') {
                         def qg = waitForQualityGate abortPipeline: false
                         echo ""
                         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
