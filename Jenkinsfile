@@ -26,7 +26,7 @@ pipeline {
                 script {
                     sh '''
                         # Don't exit on error - we'll try multiple installation methods
-                        set +e
+                        set +e  # Continue on errors for tool installation
                         
                         # ============================================
                         # Install Node.js 18 if not available
@@ -141,28 +141,65 @@ pipeline {
                                 exit 1
                             }
                             
-                            # Install unzip if not available (required for extraction)
-                            if ! command -v unzip &> /dev/null; then
-                                echo "Installing unzip..."
-                                if command -v apt-get &> /dev/null; then
-                                    apt-get update -qq 2>/dev/null || true
-                                    apt-get install -y unzip 2>/dev/null || true
-                                elif command -v yum &> /dev/null; then
-                                    yum install -y unzip 2>/dev/null || true
-                                elif command -v apk &> /dev/null; then
-                                    apk add --no-cache unzip 2>/dev/null || true
+                            # Try to extract SonarQube Scanner (multiple methods, non-blocking)
+                            echo "Extracting SonarQube Scanner..."
+                            EXTRACTION_SUCCESS=false
+                            
+                            # Method 1: Try unzip (if available)
+                            if command -v unzip &> /dev/null; then
+                                echo "Trying unzip..."
+                                if unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
+                                    EXTRACTION_SUCCESS=true
+                                    echo "✅ Extracted using unzip"
                                 fi
                             fi
                             
-                            # Verify unzip is now available
-                            if ! command -v unzip &> /dev/null; then
-                                echo "❌ ERROR: unzip is required but could not be installed"
-                                exit 1
+                            # Method 2: Try Python (if unzip failed)
+                            if [ "$EXTRACTION_SUCCESS" = false ] && command -v python3 &> /dev/null; then
+                                echo "Trying Python zipfile extraction..."
+                                if python3 -c "import zipfile; zipfile.ZipFile('${SONAR_SCANNER_ZIP}').extractall('.')" 2>/dev/null; then
+                                    EXTRACTION_SUCCESS=true
+                                    echo "✅ Extracted using Python"
+                                fi
                             fi
                             
-                            # Extract SonarQube Scanner
-                            echo "Extracting SonarQube Scanner..."
-                            if unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
+                            # Method 3: Try busybox unzip
+                            if [ "$EXTRACTION_SUCCESS" = false ] && command -v busybox &> /dev/null; then
+                                echo "Trying busybox unzip..."
+                                if busybox unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
+                                    EXTRACTION_SUCCESS=true
+                                    echo "✅ Extracted using busybox"
+                                fi
+                            fi
+                            
+                            # Method 4: Try installing unzip (non-blocking, won't fail if it can't install)
+                            if [ "$EXTRACTION_SUCCESS" = false ] && ! command -v unzip &> /dev/null; then
+                                echo "Attempting to install unzip (non-blocking)..."
+                                if command -v apt-get &> /dev/null; then
+                                    apt-get update -qq 2>/dev/null || true
+                                    DEBIAN_FRONTEND=noninteractive apt-get install -y unzip 2>/dev/null || true
+                                    sleep 1
+                                    hash -r 2>/dev/null || true
+                                    if command -v unzip &> /dev/null; then
+                                        if unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
+                                            EXTRACTION_SUCCESS=true
+                                            echo "✅ Extracted using newly installed unzip"
+                                        fi
+                                    fi
+                                elif command -v yum &> /dev/null; then
+                                    yum install -y unzip 2>/dev/null || true
+                                    sleep 1
+                                    hash -r 2>/dev/null || true
+                                    if command -v unzip &> /dev/null; then
+                                        if unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
+                                            EXTRACTION_SUCCESS=true
+                                            echo "✅ Extracted using newly installed unzip"
+                                        fi
+                                    fi
+                                fi
+                            fi
+                            
+                            if [ "$EXTRACTION_SUCCESS" = true ]; then
                                 rm -f ${SONAR_SCANNER_ZIP}
                                 
                                 # Add to PATH
@@ -175,9 +212,10 @@ pipeline {
                                     echo "✅ SonarQube Scanner extracted (will be used in analysis stage)"
                                 fi
                             else
-                                echo "❌ ERROR: Failed to extract SonarQube Scanner"
-                                echo "Checking if file exists: $(ls -lh ${SONAR_SCANNER_ZIP} 2>/dev/null || echo 'NOT FOUND')"
-                                exit 1
+                                echo "⚠️ Could not extract SonarQube Scanner in Install Tools stage (non-blocking)"
+                                echo "   File downloaded: ${SONAR_SCANNER_ZIP}"
+                                echo "   Will extract during SonarQube Analysis stage"
+                                # Don't exit - this is not critical, we'll extract in analysis stage
                             fi
                         else
                             echo "✅ SonarQube Scanner already installed: $(sonar-scanner --version 2>/dev/null | head -1 || echo 'available')"
@@ -415,11 +453,40 @@ pipeline {
                                     curl -L -k -o ${SONAR_SCANNER_ZIP} https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/${SONAR_SCANNER_ZIP}
                                     
                                     if [ -f "${SONAR_SCANNER_ZIP}" ]; then
-                                        unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null || true
-                                        rm -f ${SONAR_SCANNER_ZIP}
-                                        export PATH=$PATH:$(pwd)/sonar-scanner-${SONAR_SCANNER_VERSION}-linux/bin
-                                        SCANNER_CMD="sonar-scanner"
-                                        echo "✅ SonarQube Scanner downloaded and installed"
+                                        # Try multiple extraction methods
+                                        EXTRACTED=false
+                                        
+                                        # Try unzip
+                                        if command -v unzip &> /dev/null; then
+                                            if unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
+                                                EXTRACTED=true
+                                            fi
+                                        fi
+                                        
+                                        # Try Python if unzip failed
+                                        if [ "$EXTRACTED" = false ] && command -v python3 &> /dev/null; then
+                                            if python3 -c "import zipfile; zipfile.ZipFile('${SONAR_SCANNER_ZIP}').extractall('.')" 2>/dev/null; then
+                                                EXTRACTED=true
+                                            fi
+                                        fi
+                                        
+                                        # Try busybox if still failed
+                                        if [ "$EXTRACTED" = false ] && command -v busybox &> /dev/null; then
+                                            if busybox unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
+                                                EXTRACTED=true
+                                            fi
+                                        fi
+                                        
+                                        if [ "$EXTRACTED" = true ]; then
+                                            rm -f ${SONAR_SCANNER_ZIP}
+                                            export PATH=$PATH:$(pwd)/sonar-scanner-${SONAR_SCANNER_VERSION}-linux/bin
+                                            SCANNER_CMD="sonar-scanner"
+                                            echo "✅ SonarQube Scanner downloaded and installed"
+                                        else
+                                            echo "❌ ERROR: Failed to extract SonarQube Scanner"
+                                            echo "   Tried: unzip, python3, busybox"
+                                            exit 1
+                                        fi
                                     else
                                         echo "❌ ERROR: Failed to download SonarQube Scanner"
                                         exit 1
