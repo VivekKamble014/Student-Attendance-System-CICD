@@ -26,7 +26,7 @@ async function createVivekAdmin() {
 
   try {
     console.log('🔍 Checking if admin user already exists...');
-    
+
     // Check if admin already exists
     const existing = await prisma.user.findUnique({
       where: { email }
@@ -48,14 +48,14 @@ async function createVivekAdmin() {
     console.log('👤 Creating admin user...');
     // Create admin user
     const admin = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
+        data: {
+          email,
+          password: hashedPassword,
         fullName,
-        role: 'ADMIN',
-        status: 'APPROVED',
+          role: 'ADMIN',
+          status: 'APPROVED',
         department
-      }
+        }
     });
 
     console.log('');

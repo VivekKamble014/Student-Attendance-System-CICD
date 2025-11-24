@@ -36,8 +36,14 @@ COPY --from=builder /app/tsconfig.json ./
 
 # Create public directory and copy if it exists
 RUN mkdir -p ./public
-# Copy public directory (will use empty dir if source doesn't exist)
-COPY --from=builder /app/public ./public/
+# Copy public directory (handle case where it might be empty)
+# Use shell to check and copy only if source exists and has content
+RUN if [ -d "/app/public" ] && [ "$(ls -A /app/public 2>/dev/null)" ]; then \
+        cp -r /app/public/* ./public/ 2>/dev/null || true; \
+    else \
+        echo "Public directory is empty or doesn't exist, using empty directory"; \
+        touch ./public/.gitkeep || true; \
+    fi
 
 # Expose port
 EXPOSE 3000

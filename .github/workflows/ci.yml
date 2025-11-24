@@ -11,7 +11,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -20,9 +20,9 @@ jobs:
 
       - name: 📦 Setup Node.js
         uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
+      with:
+        node-version: '18'
+        cache: 'npm'
 
       - name: 📥 Install dependencies
         run: npm ci
@@ -34,15 +34,15 @@ jobs:
         run: npm run lint || true
 
       - name: 🏗️ Build application
-        run: npm run build
-        env:
+      run: npm run build
+      env:
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'mysql://user:pass@localhost:3306/test' }}
           JWT_SECRET: ${{ secrets.JWT_SECRET || 'test-secret-key-for-ci' }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}
           NODE_ENV: production
 
       - name: 🔎 SonarQube Analysis
-        run: |
+      run: |
           echo "🔎 Running SonarQube analysis..."
           SONAR_HOST_URL="${{ secrets.SONAR_HOST_URL || 'http://sonarqube.imcc.com' }}"
           SONAR_TOKEN="${{ secrets.SONAR_TOKEN }}"
