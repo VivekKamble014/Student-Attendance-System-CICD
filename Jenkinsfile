@@ -315,140 +315,85 @@ pipeline {
                         echo "⚠️ .nvm directory not found at $HOME/.nvm"
                     fi
                     
-                    # Find Node.js using ONLY direct path check (most reliable in Jenkins)
-                    NODE_BIN=""
-                    
-                    # Check direct path first (most reliable)
+                    # Find Node.js using direct path (simplified, no variables)
+                    # Check if Node.js exists at expected location
                     if [ -x "$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
-                        NODE_BIN="$HOME/.nvm/versions/node/v18.20.8/bin/node"
-                        export PATH="$(dirname $NODE_BIN):$PATH"
-                        echo "✅ Found Node.js at: $NODE_BIN"
+                        export PATH="$HOME/.nvm/versions/node/v18.20.8/bin:$PATH"
+                        echo "✅ Found Node.js at: $HOME/.nvm/versions/node/v18.20.8/bin/node"
+                        echo "✅ Node.js version: $($HOME/.nvm/versions/node/v18.20.8/bin/node --version)"
                     elif [ -d "$HOME/.nvm/versions/node" ]; then
                         # Find any Node.js version
-                        NODE_BIN=$(find "$HOME/.nvm/versions/node" -name "node" -type f -executable 2>/dev/null | head -1)
-                        if [ -n "$NODE_BIN" ] && [ -x "$NODE_BIN" ]; then
-                            export PATH="$(dirname $NODE_BIN):$PATH"
-                            echo "✅ Found Node.js at: $NODE_BIN"
-                        fi
-                    fi
-                    
-                    # Verify Node.js actually works by executing it directly
-                    if [ -n "$NODE_BIN" ] && [ -x "$NODE_BIN" ]; then
-                        NODE_VERSION=$("$NODE_BIN" --version 2>/dev/null || echo "")
-                        if [ -n "$NODE_VERSION" ]; then
-                            echo "✅ Node.js verified working: $NODE_VERSION"
-                            # Ensure it's in PATH for subsequent commands
-                            export PATH="$(dirname $NODE_BIN):$PATH"
+                        FOUND_NODE=$(find "$HOME/.nvm/versions/node" -name "node" -type f -executable 2>/dev/null | head -1)
+                        if [ -n "$FOUND_NODE" ] && [ -x "$FOUND_NODE" ]; then
+                            export PATH="$(dirname $FOUND_NODE):$PATH"
+                            echo "✅ Found Node.js at: $FOUND_NODE"
+                            echo "✅ Node.js version: $($FOUND_NODE --version)"
                         else
-                            echo "❌ Node.js binary found but doesn't execute properly"
-                            NODE_BIN=""
+                            echo "❌ ERROR: Node.js binary not found in nvm directory"
+                            exit 1
                         fi
-                    fi
-                    
-                    # Final check - if still not found, exit
-                    if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
-                        echo ""
-                        echo "❌ ERROR: Node.js is not available!"
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                        echo "Current PATH: $PATH"
-                        echo "HOME: $HOME"
-                        echo "NVM_DIR: ${NVM_DIR:-NOT SET}"
-                        if [ -d "$HOME/.nvm" ]; then
-                            echo "NVM directory exists: $HOME/.nvm"
-                            echo "Installed Node.js versions:"
-                            ls -la "$HOME/.nvm/versions/node/" 2>/dev/null || echo "  No versions found"
-                        else
-                            echo "NVM directory does NOT exist: $HOME/.nvm"
-                        fi
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    else
+                        echo "❌ ERROR: NVM directory not found"
                         exit 1
                     fi
                     
-                    # Ensure Node.js is in PATH for subsequent commands
-                    if [ -n "$NODE_BIN" ]; then
-                        export PATH="$(dirname $NODE_BIN):$PATH"
-                    fi
-                    
-                    # Display Node.js information (use the NODE_BIN we already found)
-                    if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
-                        # Fallback: find it again
-                        if [ -x "$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
-                            NODE_BIN="$HOME/.nvm/versions/node/v18.20.8/bin/node"
-                            export PATH="$(dirname $NODE_BIN):$PATH"
+                    # Verify Node.js works
+                    if ! "$HOME/.nvm/versions/node/v18.20.8/bin/node" --version &> /dev/null 2>&1; then
+                        # Try the found node if different
+                        if [ -n "$FOUND_NODE" ] && "$FOUND_NODE" --version &> /dev/null 2>&1; then
+                            echo "✅ Node.js verified working"
                         else
-                            NODE_BIN=$(find "$HOME/.nvm/versions/node" -name "node" -type f -executable 2>/dev/null | head -1)
-                            if [ -n "$NODE_BIN" ]; then
-                                export PATH="$(dirname $NODE_BIN):$PATH"
-                            fi
+                            echo "❌ ERROR: Node.js binary found but doesn't execute"
+                            exit 1
                         fi
                     fi
                     
-                    if [ -n "$NODE_BIN" ] && [ -x "$NODE_BIN" ]; then
-                        NPM_BIN="$(dirname $NODE_BIN)/npm"
-                        echo ""
-                        echo "✅ Node.js Environment Ready:"
-                        echo "   Node.js: $($NODE_BIN --version 2>/dev/null || echo 'version check failed')"
-                        echo "   npm: $($NPM_BIN --version 2>/dev/null || echo 'npm not found')"
-                        echo "   Node.js path: $NODE_BIN"
-                        echo "   npm path: $NPM_BIN"
-                        echo ""
-                        # Ensure these are in PATH for subsequent commands
-                        export PATH="$(dirname $NODE_BIN):$PATH"
-                    else
-                        echo ""
-                        echo "⚠️ Could not determine Node.js path, but continuing..."
-                        echo ""
+                    # Display Node.js information
+                    echo ""
+                    echo "✅ Node.js Environment Ready:"
+                    if [ -x "$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
+                        echo "   Node.js: $($HOME/.nvm/versions/node/v18.20.8/bin/node --version)"
+                        echo "   npm: $($HOME/.nvm/versions/node/v18.20.8/bin/npm --version 2>/dev/null || echo 'not found')"
+                        echo "   Node.js path: $HOME/.nvm/versions/node/v18.20.8/bin/node"
+                    elif [ -n "$FOUND_NODE" ]; then
+                        echo "   Node.js: $($FOUND_NODE --version)"
+                        echo "   npm: $($(dirname $FOUND_NODE)/npm --version 2>/dev/null || echo 'not found')"
+                        echo "   Node.js path: $FOUND_NODE"
                     fi
+                    echo ""
                     
                     # ============================================
                     # Install Dependencies
                     # ============================================
                     echo "📦 Installing project dependencies..."
                     
-                    # Ensure NODE_BIN and NPM_BIN are set
-                    if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
-                        if [ -x "$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
-                            NODE_BIN="$HOME/.nvm/versions/node/v18.20.8/bin/node"
-                            export PATH="$(dirname $NODE_BIN):$PATH"
-                        fi
-                    fi
-                    
-                    if [ -n "$NODE_BIN" ] && [ -x "$NODE_BIN" ]; then
-                        NPM_BIN="$(dirname $NODE_BIN)/npm"
-                        NPX_BIN="$(dirname $NODE_BIN)/npx"
-                        export PATH="$(dirname $NODE_BIN):$PATH"
+                    # Use direct paths for npm commands
+                    if [ -x "$HOME/.nvm/versions/node/v18.20.8/bin/npm" ]; then
+                        NPM_CMD="$HOME/.nvm/versions/node/v18.20.8/bin/npm"
+                        NPX_CMD="$HOME/.nvm/versions/node/v18.20.8/bin/npx"
+                    elif [ -n "$FOUND_NODE" ]; then
+                        NPM_CMD="$(dirname $FOUND_NODE)/npm"
+                        NPX_CMD="$(dirname $FOUND_NODE)/npx"
+                    else
+                        NPM_CMD="npm"
+                        NPX_CMD="npx"
                     fi
                     
                     # Try npm ci first (faster, requires package-lock.json)
                     if [ -f "package-lock.json" ]; then
                         echo "Using npm ci (package-lock.json found)..."
-                        if [ -n "$NPM_BIN" ] && [ -x "$NPM_BIN" ]; then
-                            "$NPM_BIN" ci --prefer-offline --no-audit || {
-                                echo "⚠️ npm ci failed, trying npm install..."
-                                "$NPM_BIN" install --prefer-offline --no-audit
-                            }
-                        else
-                            npm ci --prefer-offline --no-audit || {
-                                echo "⚠️ npm ci failed, trying npm install..."
-                                npm install --prefer-offline --no-audit
-                            }
-                        fi
+                        "$NPM_CMD" ci --prefer-offline --no-audit || {
+                            echo "⚠️ npm ci failed, trying npm install..."
+                            "$NPM_CMD" install --prefer-offline --no-audit
+                        }
                     else
                         echo "Using npm install (no package-lock.json)..."
-                        if [ -n "$NPM_BIN" ] && [ -x "$NPM_BIN" ]; then
-                            "$NPM_BIN" install --prefer-offline --no-audit
-                        else
-                            npm install --prefer-offline --no-audit
-                        fi
+                        "$NPM_CMD" install --prefer-offline --no-audit
                     fi
                     
                     # Generate Prisma Client
                     echo "🔧 Generating Prisma Client..."
-                    if [ -n "$NPX_BIN" ] && [ -x "$NPX_BIN" ]; then
-                        "$NPX_BIN" prisma generate
-                    else
-                        npx prisma generate
-                    fi
+                    "$NPX_CMD" prisma generate
                     
                     echo ""
                     echo "✅ Dependencies installed successfully!"
@@ -730,7 +675,7 @@ pipeline {
                                 exit 0
                             fi
                             
-                            echo \$NEXUS_PASS | docker login ${NEXUS_REGISTRY} -u \$NEXUS_USER --password-stdin
+                            echo \${NEXUS_PASS} | docker login ${NEXUS_REGISTRY} -u \${NEXUS_USER} --password-stdin
                             docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}
                             docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:latest
                             docker push ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}
@@ -769,7 +714,7 @@ pipeline {
                             
                             docker-compose down 2>/dev/null || docker compose down 2>/dev/null || true
                             
-                            echo \$NEXUS_PASS | docker login ${NEXUS_REGISTRY} -u \$NEXUS_USER --password-stdin || true
+                            echo \${NEXUS_PASS} | docker login ${NEXUS_REGISTRY} -u \${NEXUS_USER} --password-stdin || true
                             
                             docker pull ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG} 2>/dev/null || {
                                 echo "⚠️ Using local image"
