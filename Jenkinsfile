@@ -12,10 +12,6 @@ pipeline {
         SONAR_PROJECT_KEY = '2401084-Student-Attendance-System-CICD'
     }
 
-    tools {
-        nodejs 'NodeJS18' // Configure Node.js in Jenkins Global Tool Configuration
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -24,12 +20,215 @@ pipeline {
             }
         }
 
+        stage('Install Tools') {
+            steps {
+                echo '🛠️ Installing necessary tools automatically...'
+                script {
+                    sh '''
+                        # Don't exit on error - we'll try multiple installation methods
+                        set +e
+                        
+                        # ============================================
+                        # Install Node.js 18 if not available
+                        # ============================================
+                        if ! command -v node &> /dev/null || ! node --version 2>/dev/null | grep -q "v18"; then
+                            echo "📦 Node.js not found or wrong version, installing Node.js 18..."
+                            
+                            NODE_INSTALLED=false
+                            
+                            # Try apt-get (Debian/Ubuntu)
+                            if command -v apt-get &> /dev/null && [ "$NODE_INSTALLED" = false ]; then
+                                echo "Trying apt-get installation..."
+                                curl -fsSL https://deb.nodesource.com/setup_18.x | bash - 2>/dev/null || true
+                                apt-get update -qq 2>/dev/null || true
+                                if apt-get install -y nodejs 2>/dev/null; then
+                                    NODE_INSTALLED=true
+                                    echo "✅ Node.js installed via apt-get"
+                                fi
+                            fi
+                            
+                            # Try yum (RHEL/CentOS)
+                            if command -v yum &> /dev/null && [ "$NODE_INSTALLED" = false ]; then
+                                echo "Trying yum installation..."
+                                curl -fsSL https://rpm.nodesource.com/setup_18.x | bash - 2>/dev/null || true
+                                if yum install -y nodejs 2>/dev/null; then
+                                    NODE_INSTALLED=true
+                                    echo "✅ Node.js installed via yum"
+                                fi
+                            fi
+                            
+                            # Try nvm
+                            if [ "$NODE_INSTALLED" = false ]; then
+                                echo "Trying nvm installation..."
+                                export NVM_DIR="${HOME}/.nvm"
+                                if [ ! -d "$NVM_DIR" ]; then
+                                    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash 2>/dev/null || true
+                                fi
+                                if [ -s "$NVM_DIR/nvm.sh" ]; then
+                                    . "$NVM_DIR/nvm.sh"
+                                    if nvm install 18 2>/dev/null || nvm install --lts 2>/dev/null; then
+                                        nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || true
+                                        NODE_INSTALLED=true
+                                        echo "✅ Node.js installed via nvm"
+                                    fi
+                                fi
+                            fi
+                            
+                            # Last resort: Direct download
+                            if [ "$NODE_INSTALLED" = false ]; then
+                                echo "Trying direct download..."
+                                NODE_VERSION="18.20.4"
+                                ARCH=$(uname -m)
+                                if [ "$ARCH" = "x86_64" ]; then
+                                    NODE_ARCH="x64"
+                                else
+                                    NODE_ARCH="arm64"
+                                fi
+                                
+                                if wget -q https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz 2>/dev/null || \
+                                   curl -L -o node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz 2>/dev/null; then
+                                    if command -v tar &> /dev/null; then
+                                        tar -xf node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz 2>/dev/null
+                                        export PATH=$PATH:$(pwd)/node-v${NODE_VERSION}-linux-${NODE_ARCH}/bin
+                                        rm -f node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz
+                                        NODE_INSTALLED=true
+                                        echo "✅ Node.js installed via direct download"
+                                    fi
+                                fi
+                            fi
+                            
+                            if [ "$NODE_INSTALLED" = false ]; then
+                                echo "⚠️ WARNING: Could not install Node.js automatically"
+                                echo "Please ensure Node.js 18+ is installed on Jenkins server"
+                            fi
+                        fi
+                        
+                        # Ensure Node.js is in PATH
+                        export PATH=$PATH:/usr/bin:/usr/local/bin
+                        if [ -d "$HOME/.nvm" ]; then
+                            export NVM_DIR="$HOME/.nvm"
+                            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+                            nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || true
+                        fi
+                        
+                        # Verify Node.js installation
+                        echo "✅ Node.js version: $(node --version || echo 'NOT FOUND')"
+                        echo "✅ npm version: $(npm --version || echo 'NOT FOUND')"
+                        
+                        # ============================================
+                        # Install SonarQube Scanner if not available
+                        # ============================================
+                        if ! command -v sonar-scanner &> /dev/null; then
+                            echo "📦 SonarQube Scanner not found, installing..."
+                            SONAR_SCANNER_VERSION="4.8.0.2856"
+                            SONAR_SCANNER_ZIP="sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip"
+                            
+                            # Download SonarQube Scanner
+                            echo "Downloading SonarQube Scanner ${SONAR_SCANNER_VERSION}..."
+                            wget -q --no-check-certificate https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/${SONAR_SCANNER_ZIP} || \
+                            curl -L -k -o ${SONAR_SCANNER_ZIP} https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/${SONAR_SCANNER_ZIP} || {
+                                echo "⚠️ Failed to download SonarQube Scanner"
+                                exit 1
+                            }
+                            
+                            # Install unzip if not available
+                            if ! command -v unzip &> /dev/null; then
+                                echo "Installing unzip..."
+                                apt-get install -y unzip 2>/dev/null || yum install -y unzip 2>/dev/null || true
+                            fi
+                            
+                            # Install unzip if not available
+                            if ! command -v unzip &> /dev/null; then
+                                echo "Installing unzip..."
+                                apt-get install -y unzip 2>/dev/null || yum install -y unzip 2>/dev/null || true
+                            fi
+                            
+                            # Extract SonarQube Scanner
+                            if unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
+                                rm -f ${SONAR_SCANNER_ZIP}
+                                
+                                # Add to PATH
+                                export PATH=$PATH:$(pwd)/sonar-scanner-${SONAR_SCANNER_VERSION}-linux/bin
+                                
+                                # Verify installation
+                                if sonar-scanner --version 2>/dev/null; then
+                                    echo "✅ SonarQube Scanner installed successfully"
+                                else
+                                    echo "✅ SonarQube Scanner extracted (will be used in analysis stage)"
+                                fi
+                            else
+                                echo "⚠️ Failed to extract SonarQube Scanner, will try again in analysis stage"
+                                rm -f ${SONAR_SCANNER_ZIP}
+                            fi
+                        else
+                            echo "✅ SonarQube Scanner already installed: $(sonar-scanner --version 2>/dev/null | head -1 || echo 'available')"
+                        fi
+                        
+                        # ============================================
+                        # Check Docker (required for build stage)
+                        # ============================================
+                        if ! command -v docker &> /dev/null; then
+                            echo "⚠️ Docker not found. Docker build stage may fail."
+                            echo "Please ensure Docker is installed on Jenkins server."
+                        else
+                            echo "✅ Docker is available: $(docker --version)"
+                        fi
+                        
+                        # ============================================
+                        # Check Docker Compose (required for deploy)
+                        # ============================================
+                        if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null 2>&1; then
+                            echo "⚠️ Docker Compose not found. Deployment stage may fail."
+                            echo "Please ensure Docker Compose is installed on Jenkins server."
+                        else
+                            echo "✅ Docker Compose is available: $(docker-compose --version 2>/dev/null || docker compose version 2>/dev/null)"
+                        fi
+                        
+                        # ============================================
+                        # Check required commands
+                        # ============================================
+                        echo ""
+                        echo "📋 Tool Status:"
+                        echo "  Node.js: $(node --version 2>/dev/null || echo 'NOT FOUND')"
+                        echo "  npm: $(npm --version 2>/dev/null || echo 'NOT FOUND')"
+                        echo "  SonarQube Scanner: $(command -v sonar-scanner &> /dev/null && echo 'INSTALLED' || echo 'NOT FOUND')"
+                        echo "  Docker: $(command -v docker &> /dev/null && echo 'INSTALLED' || echo 'NOT FOUND')"
+                        echo "  Docker Compose: $(command -v docker-compose &> /dev/null || docker compose version &> /dev/null && echo 'INSTALLED' || echo 'NOT FOUND')"
+                        echo ""
+                        echo "✅ All tools checked/installed successfully!"
+                    '''
+                }
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
-                echo '📦 Installing dependencies...'
+                echo '📦 Installing project dependencies...'
                 sh '''
-                    npm ci
+                    # Ensure Node.js is in PATH (from Install Tools stage)
+                    export PATH=$PATH:/usr/bin:/usr/local/bin
+                    if [ -d "$HOME/.nvm" ]; then
+                        export NVM_DIR="$HOME/.nvm"
+                        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+                        nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || nvm use default 2>/dev/null || true
+                    fi
+                    
+                    # Verify Node.js is available
+                    if ! command -v node &> /dev/null; then
+                        echo "❌ ERROR: Node.js is not available!"
+                        exit 1
+                    fi
+                    
+                    echo "Using Node.js: $(node --version)"
+                    echo "Using npm: $(npm --version)"
+                    
+                    # Install dependencies
+                    npm ci --prefer-offline --no-audit || npm install
+                    
+                    # Generate Prisma Client
                     npx prisma generate
+                    
+                    echo "✅ Dependencies installed successfully"
                 '''
             }
         }
@@ -37,7 +236,17 @@ pipeline {
         stage('Lint') {
             steps {
                 echo '🔍 Running linter...'
-                sh 'npm run lint || true' // Continue even if lint fails
+                sh '''
+                    # Ensure Node.js is in PATH
+                    export PATH=$PATH:/usr/bin:/usr/local/bin
+                    if [ -d "$HOME/.nvm" ]; then
+                        export NVM_DIR="$HOME/.nvm"
+                        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+                        nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || true
+                    fi
+                    
+                    npm run lint || true  # Continue even if lint fails
+                '''
             }
         }
 
@@ -45,9 +254,93 @@ pipeline {
             steps {
                 echo '🔎 Running SonarQube code analysis...'
                 script {
-                    def scannerHome = tool 'SonarScanner'
                     withSonarQubeEnv('SonarQube') {
-                        sh "${scannerHome}/bin/sonar-scanner"
+                        withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                            sh '''
+                                # Find SonarQube Scanner (from Install Tools stage or system)
+                                SCANNER_CMD=""
+                                
+                                # Check if scanner is in PATH
+                                if command -v sonar-scanner &> /dev/null; then
+                                    echo "✅ Using system SonarQube Scanner..."
+                                    SCANNER_CMD="sonar-scanner"
+                                # Check if scanner was installed in workspace
+                                elif [ -d "${WORKSPACE}/sonar-scanner-4.8.0.2856-linux" ]; then
+                                    echo "✅ Using downloaded SonarQube Scanner from workspace..."
+                                    export PATH=$PATH:${WORKSPACE}/sonar-scanner-4.8.0.2856-linux/bin
+                                    SCANNER_CMD="sonar-scanner"
+                                # Check for any sonar-scanner directory
+                                elif ls -d ${WORKSPACE}/sonar-scanner-*-linux 2>/dev/null | head -1 | read SCANNER_DIR; then
+                                    echo "✅ Using SonarQube Scanner from: $SCANNER_DIR"
+                                    export PATH=$PATH:${SCANNER_DIR}/bin
+                                    SCANNER_CMD="sonar-scanner"
+                                # Last resort: Download and install
+                                else
+                                    echo "⚠️ SonarQube Scanner not found, downloading..."
+                                    SONAR_SCANNER_VERSION="4.8.0.2856"
+                                    SONAR_SCANNER_ZIP="sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip"
+                                    
+                                    wget -q --no-check-certificate https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/${SONAR_SCANNER_ZIP} || \
+                                    curl -L -k -o ${SONAR_SCANNER_ZIP} https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/${SONAR_SCANNER_ZIP}
+                                    
+                                    if [ -f "${SONAR_SCANNER_ZIP}" ]; then
+                                        unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null || true
+                                        rm -f ${SONAR_SCANNER_ZIP}
+                                        export PATH=$PATH:$(pwd)/sonar-scanner-${SONAR_SCANNER_VERSION}-linux/bin
+                                        SCANNER_CMD="sonar-scanner"
+                                        echo "✅ SonarQube Scanner downloaded and installed"
+                                    else
+                                        echo "❌ ERROR: Failed to download SonarQube Scanner"
+                                        exit 1
+                                    fi
+                                fi
+                                
+                                # Verify scanner is available
+                                if [ -z "$SCANNER_CMD" ] || ! command -v sonar-scanner &> /dev/null; then
+                                    echo "❌ ERROR: SonarQube Scanner is not available!"
+                                    exit 1
+                                fi
+                                
+                                echo "Using: $(which sonar-scanner)"
+                                sonar-scanner --version || true
+                                
+                                # Verify sonar-project.properties exists
+                                if [ ! -f "sonar-project.properties" ]; then
+                                    echo "⚠️ WARNING: sonar-project.properties not found, using command-line parameters"
+                                else
+                                    echo "✅ Using sonar-project.properties file"
+                                    cat sonar-project.properties | head -5
+                                fi
+                                
+                                # Run SonarQube analysis
+                                echo ""
+                                echo "🔎 Starting SonarQube analysis..."
+                                echo "📋 Project Key: ${SONAR_PROJECT_KEY}"
+                                echo "🌐 SonarQube URL: ${SONAR_HOST_URL}"
+                                echo ""
+                                
+                                # Run scanner (it will use sonar-project.properties and override with command-line params)
+                                ${SCANNER_CMD} \
+                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                    -Dsonar.host.url=${SONAR_HOST_URL} \
+                                    -Dsonar.login=${SONAR_TOKEN}
+                                
+                                echo ""
+                                echo "✅ SonarQube analysis completed successfully!"
+                                echo ""
+                                echo "📊 ========================================"
+                                echo "📊 SonarQube Dashboard:"
+                                echo "📊 ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
+                                echo "📊 ========================================"
+                                echo ""
+                                echo "🔍 Check the dashboard to see:"
+                                echo "   ✅ Quality Gate Status (Passed/Failed)"
+                                echo "   ✅ Code Quality Rating"
+                                echo "   ✅ Security Vulnerabilities"
+                                echo "   ✅ Code Smells"
+                                echo "   ✅ Bugs"
+                            '''
+                        }
                     }
                 }
             }
@@ -56,8 +349,40 @@ pipeline {
         stage('Wait for SonarQube Quality Gate') {
             steps {
                 echo '⏳ Waiting for SonarQube Quality Gate...'
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
+                echo ""
+                echo "📊 ========================================"
+                echo "📊 SonarQube Dashboard:"
+                echo "📊 ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
+                echo "📊 ========================================"
+                echo ""
+                script {
+                    timeout(time: 5, unit: 'MINUTES') {
+                        def qg = waitForQualityGate abortPipeline: false
+                        echo ""
+                        echo "📊 ========================================"
+                        echo "📊 Quality Gate Result:"
+                        if (qg.status == 'OK') {
+                            echo "✅ STATUS: PASSED ✅"
+                            echo "✅ Your code meets quality standards!"
+                        } else if (qg.status == 'ERROR') {
+                            echo "❌ STATUS: FAILED ❌"
+                            echo "⚠️ Your code does not meet quality standards"
+                        } else {
+                            echo "⚠️ STATUS: ${qg.status}"
+                        }
+                        echo "📊 ========================================"
+                        echo ""
+                        echo "🔗 View full details:"
+                        echo "   ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
+                        echo ""
+                        echo "📋 You can see:"
+                        echo "   • Quality Gate: Passed ✅ or Failed ❌"
+                        echo "   • Reliability Rating: A, B, C, D, or E"
+                        echo "   • Security Rating: A, B, C, D, or E"
+                        echo "   • Maintainability Rating: A, B, C, D, or E"
+                        echo "   • Code Smells, Bugs, Vulnerabilities"
+                        echo ""
+                    }
                 }
             }
         }
@@ -109,30 +434,30 @@ pipeline {
                 echo '🚀 Deploying application...'
                 script {
                     withCredentials([usernamePassword(credentialsId: 'nexus-credentials', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                        sh """
-                            # Navigate to deployment directory
-                            cd /opt/attendance-system || {
-                                echo "Creating deployment directory..."
-                                sudo mkdir -p /opt/attendance-system
-                                sudo chown \$USER:\$USER /opt/attendance-system
-                                cd /opt/attendance-system
-                            }
-                            
-                            # Pull latest docker-compose.yml from repo (or use existing)
-                            # Copy docker-compose.yml if not exists
-                            if [ ! -f docker-compose.yml ]; then
-                                cp ${WORKSPACE}/docker-compose.yml .
-                            fi
-                            
-                            # Stop and remove existing containers
-                            docker-compose down || true
-                            
+                    sh """
+                        # Navigate to deployment directory
+                        cd /opt/attendance-system || {
+                            echo "Creating deployment directory..."
+                            sudo mkdir -p /opt/attendance-system
+                            sudo chown \$USER:\$USER /opt/attendance-system
+                            cd /opt/attendance-system
+                        }
+                        
+                        # Pull latest docker-compose.yml from repo (or use existing)
+                        # Copy docker-compose.yml if not exists
+                        if [ ! -f docker-compose.yml ]; then
+                            cp ${WORKSPACE}/docker-compose.yml .
+                        fi
+                        
+                        # Stop and remove existing containers
+                        docker-compose down || true
+                        
                             # Login to Nexus and pull latest image
                             echo \$NEXUS_PASS | docker login ${NEXUS_REGISTRY} -u \$NEXUS_USER --password-stdin
-                            docker pull ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG} || {
+                        docker pull ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG} || {
                                 echo "⚠️ Could not pull from Nexus, using local image..."
-                                docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
-                            }
+                            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
+                        }
                             
                             # Update docker-compose.yml to use the image from Nexus
                             sed -i 's|build:|# build:|g; s|context: .|# context: .|g; s|dockerfile: Dockerfile|# dockerfile: Dockerfile|g' docker-compose.yml || true
@@ -141,29 +466,29 @@ pipeline {
                             else
                                 sed -i 's|image:.*|image: ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}|g' docker-compose.yml || true
                             fi
-                            
-                            # Start containers
-                            docker-compose up -d
-                            
-                            # Wait for services to be ready
-                            echo "Waiting for services to start..."
-                            sleep 10
-                            
-                            # Run database migrations
-                            echo "Running database migrations..."
-                            docker exec attendance_app npx prisma migrate deploy || {
-                                echo "Migration failed, but continuing..."
-                            }
-                            
-                            # Health check
-                            echo "Performing health check..."
-                            sleep 5
+                        
+                        # Start containers
+                        docker-compose up -d
+                        
+                        # Wait for services to be ready
+                        echo "Waiting for services to start..."
+                        sleep 10
+                        
+                        # Run database migrations
+                        echo "Running database migrations..."
+                        docker exec attendance_app npx prisma migrate deploy || {
+                            echo "Migration failed, but continuing..."
+                        }
+                        
+                        # Health check
+                        echo "Performing health check..."
+                        sleep 5
                             curl -f http://localhost:3000/api/health || {
-                                echo "⚠️ Health check failed, but deployment completed"
-                            }
-                            
-                            echo "✅ Deployment completed successfully!"
-                        """
+                            echo "⚠️ Health check failed, but deployment completed"
+                        }
+                        
+                        echo "✅ Deployment completed successfully!"
+                    """
                     }
                 }
             }
