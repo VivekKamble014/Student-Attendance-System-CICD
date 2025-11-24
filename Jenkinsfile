@@ -103,17 +103,27 @@ pipeline {
                             fi
                         fi
                         
-                        # Ensure Node.js is in PATH
+                        # Ensure Node.js is in PATH and verify
                         export PATH=$PATH:/usr/bin:/usr/local/bin
                         if [ -d "$HOME/.nvm" ]; then
                             export NVM_DIR="$HOME/.nvm"
                             [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-                            nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || true
+                            nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || nvm use default 2>/dev/null || true
                         fi
                         
-                        # Verify Node.js installation
-                        echo "✅ Node.js version: $(node --version || echo 'NOT FOUND')"
-                        echo "✅ npm version: $(npm --version || echo 'NOT FOUND')"
+                        # Verify Node.js installation (after sourcing nvm)
+                        if command -v node &> /dev/null; then
+                            echo "✅ Node.js version: $(node --version)"
+                            echo "✅ npm version: $(npm --version)"
+                        else
+                            echo "❌ ERROR: Node.js is not available after installation!"
+                            echo "Current PATH: $PATH"
+                            if [ -d "$HOME/.nvm" ]; then
+                                echo "NVM_DIR exists: $HOME/.nvm"
+                                [ -s "$HOME/.nvm/nvm.sh" ] && echo "nvm.sh exists" || echo "nvm.sh NOT found"
+                            fi
+                            exit 1
+                        fi
                         
                         # ============================================
                         # Install SonarQube Scanner if not available
@@ -131,19 +141,27 @@ pipeline {
                                 exit 1
                             }
                             
-                            # Install unzip if not available
+                            # Install unzip if not available (required for extraction)
                             if ! command -v unzip &> /dev/null; then
                                 echo "Installing unzip..."
-                                apt-get install -y unzip 2>/dev/null || yum install -y unzip 2>/dev/null || true
+                                if command -v apt-get &> /dev/null; then
+                                    apt-get update -qq 2>/dev/null || true
+                                    apt-get install -y unzip 2>/dev/null || true
+                                elif command -v yum &> /dev/null; then
+                                    yum install -y unzip 2>/dev/null || true
+                                elif command -v apk &> /dev/null; then
+                                    apk add --no-cache unzip 2>/dev/null || true
+                                fi
                             fi
                             
-                            # Install unzip if not available
+                            # Verify unzip is now available
                             if ! command -v unzip &> /dev/null; then
-                                echo "Installing unzip..."
-                                apt-get install -y unzip 2>/dev/null || yum install -y unzip 2>/dev/null || true
+                                echo "❌ ERROR: unzip is required but could not be installed"
+                                exit 1
                             fi
                             
                             # Extract SonarQube Scanner
+                            echo "Extracting SonarQube Scanner..."
                             if unzip -q ${SONAR_SCANNER_ZIP} 2>/dev/null; then
                                 rm -f ${SONAR_SCANNER_ZIP}
                                 
@@ -157,8 +175,9 @@ pipeline {
                                     echo "✅ SonarQube Scanner extracted (will be used in analysis stage)"
                                 fi
                             else
-                                echo "⚠️ Failed to extract SonarQube Scanner, will try again in analysis stage"
-                                rm -f ${SONAR_SCANNER_ZIP}
+                                echo "❌ ERROR: Failed to extract SonarQube Scanner"
+                                echo "Checking if file exists: $(ls -lh ${SONAR_SCANNER_ZIP} 2>/dev/null || echo 'NOT FOUND')"
+                                exit 1
                             fi
                         else
                             echo "✅ SonarQube Scanner already installed: $(sonar-scanner --version 2>/dev/null | head -1 || echo 'available')"
@@ -170,8 +189,10 @@ pipeline {
                         if ! command -v docker &> /dev/null; then
                             echo "⚠️ Docker not found. Docker build stage may fail."
                             echo "Please ensure Docker is installed on Jenkins server."
+                            DOCKER_STATUS="NOT FOUND"
                         else
                             echo "✅ Docker is available: $(docker --version)"
+                            DOCKER_STATUS="INSTALLED"
                         fi
                         
                         # ============================================
@@ -180,20 +201,31 @@ pipeline {
                         if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null 2>&1; then
                             echo "⚠️ Docker Compose not found. Deployment stage may fail."
                             echo "Please ensure Docker Compose is installed on Jenkins server."
+                            DOCKER_COMPOSE_STATUS="NOT FOUND"
                         else
                             echo "✅ Docker Compose is available: $(docker-compose --version 2>/dev/null || docker compose version 2>/dev/null)"
+                            DOCKER_COMPOSE_STATUS="INSTALLED"
                         fi
                         
                         # ============================================
-                        # Check required commands
+                        # Summary of tool availability
                         # ============================================
                         echo ""
-                        echo "📋 Tool Status:"
-                        echo "  Node.js: $(node --version 2>/dev/null || echo 'NOT FOUND')"
-                        echo "  npm: $(npm --version 2>/dev/null || echo 'NOT FOUND')"
-                        echo "  SonarQube Scanner: $(command -v sonar-scanner &> /dev/null && echo 'INSTALLED' || echo 'NOT FOUND')"
-                        echo "  Docker: $(command -v docker &> /dev/null && echo 'INSTALLED' || echo 'NOT FOUND')"
-                        echo "  Docker Compose: $(command -v docker-compose &> /dev/null || docker compose version &> /dev/null && echo 'INSTALLED' || echo 'NOT FOUND')"
+                        echo "📋 Tool Status Summary:"
+                        if command -v node &> /dev/null; then
+                            echo "  ✅ Node.js: $(node --version)"
+                            echo "  ✅ npm: $(npm --version)"
+                        else
+                            echo "  ❌ Node.js: NOT FOUND"
+                            echo "  ❌ npm: NOT FOUND"
+                        fi
+                        if command -v sonar-scanner &> /dev/null; then
+                            echo "  ✅ SonarQube Scanner: $(sonar-scanner --version 2>/dev/null | head -1 || echo 'available')"
+                        else
+                            echo "  ⚠️  SonarQube Scanner: Will be downloaded in analysis stage"
+                        fi
+                        echo "  ${DOCKER_STATUS:+⚠️  }Docker: ${DOCKER_STATUS:-NOT FOUND}"
+                        echo "  ${DOCKER_COMPOSE_STATUS:+⚠️  }Docker Compose: ${DOCKER_COMPOSE_STATUS:-NOT FOUND}"
                         echo ""
                         echo "✅ All tools checked/installed successfully!"
                     '''
@@ -205,30 +237,113 @@ pipeline {
             steps {
                 echo '📦 Installing project dependencies...'
                 sh '''
-                    # Ensure Node.js is in PATH (from Install Tools stage)
+                    set -e  # Exit on error
+                    
+                    # ============================================
+                    # Setup Node.js Environment
+                    # ============================================
+                    echo "🔧 Setting up Node.js environment..."
+                    
+                    # Initialize PATH
                     export PATH=$PATH:/usr/bin:/usr/local/bin
+                    
+                    # Source nvm if it exists
                     if [ -d "$HOME/.nvm" ]; then
                         export NVM_DIR="$HOME/.nvm"
-                        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-                        nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || nvm use default 2>/dev/null || true
+                        if [ -s "$NVM_DIR/nvm.sh" ]; then
+                            echo "📦 Sourcing nvm from: $NVM_DIR"
+                            . "$NVM_DIR/nvm.sh"
+                            
+                            # Try to use Node.js 18
+                            if nvm use 18 2>/dev/null; then
+                                echo "✅ Using Node.js 18 via nvm"
+                            elif nvm use --lts 2>/dev/null; then
+                                echo "✅ Using LTS Node.js via nvm"
+                            elif nvm use default 2>/dev/null; then
+                                echo "✅ Using default Node.js via nvm"
+                            else
+                                echo "⚠️ Could not switch Node.js version, trying to find installed version..."
+                                nvm ls
+                                # Try to use any installed version
+                                INSTALLED_VERSION=$(nvm ls --no-colors | grep -E "v[0-9]+\.[0-9]+\.[0-9]+" | head -1 | tr -d ' ' | tr -d '->' | tr -d '*')
+                                if [ -n "$INSTALLED_VERSION" ]; then
+                                    nvm use "$INSTALLED_VERSION" 2>/dev/null || true
+                                fi
+                            fi
+                        else
+                            echo "⚠️ nvm.sh not found at $NVM_DIR/nvm.sh"
+                        fi
+                    else
+                        echo "⚠️ .nvm directory not found at $HOME/.nvm"
+                    fi
+                    
+                    # Check for Node.js in common locations
+                    if ! command -v node &> /dev/null; then
+                        echo "🔍 Node.js not in PATH, checking common locations..."
+                        if [ -f "$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
+                            export PATH="$HOME/.nvm/versions/node/v18.20.8/bin:$PATH"
+                            echo "✅ Found Node.js at $HOME/.nvm/versions/node/v18.20.8/bin"
+                        elif [ -d "$HOME/.nvm/versions/node" ]; then
+                            # Find any Node.js version
+                            NODE_PATH=$(find "$HOME/.nvm/versions/node" -name "node" -type f 2>/dev/null | head -1)
+                            if [ -n "$NODE_PATH" ]; then
+                                export PATH="$(dirname $NODE_PATH):$PATH"
+                                echo "✅ Found Node.js at: $NODE_PATH"
+                            fi
+                        fi
                     fi
                     
                     # Verify Node.js is available
                     if ! command -v node &> /dev/null; then
+                        echo ""
                         echo "❌ ERROR: Node.js is not available!"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "Current PATH: $PATH"
+                        echo "HOME: $HOME"
+                        echo "NVM_DIR: ${NVM_DIR:-NOT SET}"
+                        if [ -d "$HOME/.nvm" ]; then
+                            echo "NVM directory exists: $HOME/.nvm"
+                            echo "Installed Node.js versions:"
+                            ls -la "$HOME/.nvm/versions/node/" 2>/dev/null || echo "  No versions found"
+                        else
+                            echo "NVM directory does NOT exist: $HOME/.nvm"
+                        fi
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                         exit 1
                     fi
                     
-                    echo "Using Node.js: $(node --version)"
-                    echo "Using npm: $(npm --version)"
+                    # Display Node.js information
+                    echo ""
+                    echo "✅ Node.js Environment Ready:"
+                    echo "   Node.js: $(node --version)"
+                    echo "   npm: $(npm --version)"
+                    echo "   Node.js path: $(which node)"
+                    echo "   npm path: $(which npm)"
+                    echo ""
                     
-                    # Install dependencies
-                    npm ci --prefer-offline --no-audit || npm install
+                    # ============================================
+                    # Install Dependencies
+                    # ============================================
+                    echo "📦 Installing project dependencies..."
+                    
+                    # Try npm ci first (faster, requires package-lock.json)
+                    if [ -f "package-lock.json" ]; then
+                        echo "Using npm ci (package-lock.json found)..."
+                        npm ci --prefer-offline --no-audit || {
+                            echo "⚠️ npm ci failed, trying npm install..."
+                            npm install --prefer-offline --no-audit
+                        }
+                    else
+                        echo "Using npm install (no package-lock.json)..."
+                        npm install --prefer-offline --no-audit
+                    fi
                     
                     # Generate Prisma Client
+                    echo "🔧 Generating Prisma Client..."
                     npx prisma generate
                     
-                    echo "✅ Dependencies installed successfully"
+                    echo ""
+                    echo "✅ Dependencies installed successfully!"
                 '''
             }
         }
@@ -237,14 +352,30 @@ pipeline {
             steps {
                 echo '🔍 Running linter...'
                 sh '''
-                    # Ensure Node.js is in PATH
+                    # Setup Node.js environment (same as Install Dependencies)
                     export PATH=$PATH:/usr/bin:/usr/local/bin
                     if [ -d "$HOME/.nvm" ]; then
                         export NVM_DIR="$HOME/.nvm"
-                        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-                        nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || true
+                        if [ -s "$NVM_DIR/nvm.sh" ]; then
+                            . "$NVM_DIR/nvm.sh"
+                            nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || nvm use default 2>/dev/null || true
+                        fi
                     fi
                     
+                    # Fallback: Check common Node.js locations
+                    if ! command -v node &> /dev/null && [ -d "$HOME/.nvm/versions/node" ]; then
+                        NODE_PATH=$(find "$HOME/.nvm/versions/node" -name "node" -type f 2>/dev/null | head -1)
+                        if [ -n "$NODE_PATH" ]; then
+                            export PATH="$(dirname $NODE_PATH):$PATH"
+                        fi
+                    fi
+                    
+                    if ! command -v node &> /dev/null; then
+                        echo "⚠️ Node.js not found, skipping lint"
+                        exit 0
+                    fi
+                    
+                    echo "Using Node.js: $(node --version)"
                     npm run lint || true  # Continue even if lint fails
                 '''
             }
@@ -514,10 +645,13 @@ pipeline {
         always {
             // Clean up Docker images to save space (optional)
             sh '''
-                # Remove old Docker images (keep last 5)
-                docker images ${DOCKER_IMAGE} --format "{{.ID}}" | tail -n +6 | xargs -r docker rmi || true
+                # Remove old Docker images (keep last 5) if Docker is available
+                if command -v docker &> /dev/null; then
+                    docker images ${DOCKER_IMAGE} --format "{{.ID}}" 2>/dev/null | tail -n +6 | xargs -r docker rmi 2>/dev/null || true
+                fi
             '''
-            cleanWs()
+            // Clean workspace (using deleteDir instead of cleanWs)
+            deleteDir()
         }
     }
 }

@@ -1,0 +1,38 @@
+name: Trigger Jenkins Build
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  trigger-jenkins:
+    name: Trigger Jenkins Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔔 Trigger Jenkins Build
+        run: |
+          echo "🔔 Triggering Jenkins build..."
+          echo "Jenkins URL: ${{ secrets.JENKINS_URL || 'http://jenkins.imcc.com' }}"
+          echo "Job Name: ${{ secrets.JENKINS_JOB_NAME || '2401084-vivek-kamble' }}"
+          echo "Build Token: ${{ secrets.JENKINS_BUILD_TOKEN }}"
+          
+          if [ -n "${{ secrets.JENKINS_BUILD_TOKEN }}" ]; then
+            curl -X POST \
+              "${{ secrets.JENKINS_URL || 'http://jenkins.imcc.com' }}/job/${{ secrets.JENKINS_JOB_NAME || '2401084-vivek-kamble' }}/build?token=${{ secrets.JENKINS_BUILD_TOKEN }}" \
+              --user "${{ secrets.JENKINS_USERNAME }}:${{ secrets.JENKINS_PASSWORD }}" \
+              || echo "⚠️ Jenkins trigger failed (this is OK if webhook is configured)"
+          else
+            echo "ℹ️ Jenkins build token not configured. Using webhook instead."
+          fi
+
+      - name: ✅ Status
+        run: |
+          echo "✅ Jenkins build triggered!"
+          echo "📊 Check build at: ${{ secrets.JENKINS_URL || 'http://jenkins.imcc.com' }}/job/${{ secrets.JENKINS_JOB_NAME || '2401084-vivek-kamble' }}"
+

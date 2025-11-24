@@ -27,6 +27,9 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.backup*
+.env.tidb
+update-env-tidb.sh
 
 # vercel
 .vercel
