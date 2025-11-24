@@ -2,13 +2,14 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'student-attendance-system'
+        DOCKER_IMAGE = '2401084-vivek-kamble'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        // Update these with your server details
-        NEXUS_REGISTRY = 'your-server-ip:8082'
+        // Nexus Configuration
+        NEXUS_REGISTRY = 'nexus.imcc.com:8082'
         NEXUS_REPO = 'docker-hosted'
-        SONAR_HOST_URL = 'http://your-server-ip:9000'
-        SONAR_PROJECT_KEY = 'student-attendance-system'
+        // SonarQube Configuration
+        SONAR_HOST_URL = 'http://sonarqube.imcc.com'
+        SONAR_PROJECT_KEY = '2401084-Student-Attendance-System-CICD'
     }
 
     tools {
@@ -44,23 +45,9 @@ pipeline {
             steps {
                 echo '🔎 Running SonarQube code analysis...'
                 script {
+                    def scannerHome = tool 'SonarScanner'
                     withSonarQubeEnv('SonarQube') {
-                        sh '''
-                            # Install SonarQube Scanner if not available
-                            if ! command -v sonar-scanner &> /dev/null; then
-                                echo "SonarQube Scanner not found, installing..."
-                                wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
-                                unzip sonar-scanner-cli-4.8.0.2856-linux.zip
-                                export PATH=$PATH:$(pwd)/sonar-scanner-4.8.0.2856-linux/bin
-                            fi
-                            
-                            sonar-scanner \
-                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                -Dsonar.sources=. \
-                                -Dsonar.host.url=${SONAR_HOST_URL} \
-                                -Dsonar.login=${SONAR_TOKEN} \
-                                -Dsonar.exclusions=**/node_modules/**,**/.next/**,**/dist/**,**/build/**
-                        '''
+                        sh "${scannerHome}/bin/sonar-scanner"
                     }
                 }
             }
@@ -99,7 +86,7 @@ pipeline {
                             # Login to Nexus Docker registry
                             echo \$NEXUS_PASS | docker login ${NEXUS_REGISTRY} -u \$NEXUS_USER --password-stdin
                             
-                            # Tag image for Nexus
+                            # Tag image for Nexus (using repository name format)
                             docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}
                             docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:latest
                             
@@ -107,7 +94,7 @@ pipeline {
                             docker push ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}
                             docker push ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:latest
                             
-                            echo "✅ Image pushed to Nexus successfully"
+                            echo "✅ Image pushed to Nexus: ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}"
                         """
                     }
                 }
@@ -121,52 +108,63 @@ pipeline {
             steps {
                 echo '🚀 Deploying application...'
                 script {
-                    sh """
-                        # Navigate to deployment directory
-                        cd /opt/attendance-system || {
-                            echo "Creating deployment directory..."
-                            sudo mkdir -p /opt/attendance-system
-                            sudo chown \$USER:\$USER /opt/attendance-system
-                            cd /opt/attendance-system
-                        }
-                        
-                        # Pull latest docker-compose.yml from repo (or use existing)
-                        # Copy docker-compose.yml if not exists
-                        if [ ! -f docker-compose.yml ]; then
-                            cp ${WORKSPACE}/docker-compose.yml .
-                        fi
-                        
-                        # Stop and remove existing containers
-                        docker-compose down || true
-                        
-                        # Pull latest image from Nexus (or use local)
-                        docker pull ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG} || {
-                            echo "Using local image..."
-                            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
-                        }
-                        
-                        # Start containers
-                        docker-compose up -d
-                        
-                        # Wait for services to be ready
-                        echo "Waiting for services to start..."
-                        sleep 10
-                        
-                        # Run database migrations
-                        echo "Running database migrations..."
-                        docker exec attendance_app npx prisma migrate deploy || {
-                            echo "Migration failed, but continuing..."
-                        }
-                        
-                        # Health check
-                        echo "Performing health check..."
-                        sleep 5
-                        curl -f http://localhost:3000 || {
-                            echo "⚠️ Health check failed, but deployment completed"
-                        }
-                        
-                        echo "✅ Deployment completed successfully!"
-                    """
+                    withCredentials([usernamePassword(credentialsId: 'nexus-credentials', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                        sh """
+                            # Navigate to deployment directory
+                            cd /opt/attendance-system || {
+                                echo "Creating deployment directory..."
+                                sudo mkdir -p /opt/attendance-system
+                                sudo chown \$USER:\$USER /opt/attendance-system
+                                cd /opt/attendance-system
+                            }
+                            
+                            # Pull latest docker-compose.yml from repo (or use existing)
+                            # Copy docker-compose.yml if not exists
+                            if [ ! -f docker-compose.yml ]; then
+                                cp ${WORKSPACE}/docker-compose.yml .
+                            fi
+                            
+                            # Stop and remove existing containers
+                            docker-compose down || true
+                            
+                            # Login to Nexus and pull latest image
+                            echo \$NEXUS_PASS | docker login ${NEXUS_REGISTRY} -u \$NEXUS_USER --password-stdin
+                            docker pull ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG} || {
+                                echo "⚠️ Could not pull from Nexus, using local image..."
+                                docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
+                            }
+                            
+                            # Update docker-compose.yml to use the image from Nexus
+                            sed -i 's|build:|# build:|g; s|context: .|# context: .|g; s|dockerfile: Dockerfile|# dockerfile: Dockerfile|g' docker-compose.yml || true
+                            if ! grep -q "image:" docker-compose.yml || grep -q "# image:" docker-compose.yml; then
+                                sed -i '/container_name: attendance_app/a\\    image: ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}' docker-compose.yml || true
+                            else
+                                sed -i 's|image:.*|image: ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}|g' docker-compose.yml || true
+                            fi
+                            
+                            # Start containers
+                            docker-compose up -d
+                            
+                            # Wait for services to be ready
+                            echo "Waiting for services to start..."
+                            sleep 10
+                            
+                            # Run database migrations
+                            echo "Running database migrations..."
+                            docker exec attendance_app npx prisma migrate deploy || {
+                                echo "Migration failed, but continuing..."
+                            }
+                            
+                            # Health check
+                            echo "Performing health check..."
+                            sleep 5
+                            curl -f http://localhost:3000/api/health || {
+                                echo "⚠️ Health check failed, but deployment completed"
+                            }
+                            
+                            echo "✅ Deployment completed successfully!"
+                        """
+                    }
                 }
             }
         }

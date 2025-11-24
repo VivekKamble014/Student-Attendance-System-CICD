@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, adminOnly } from '@/lib/middleware-api'
+import { requireAuth, adminOnly, AuthenticatedRequest } from '@/lib/middleware-api'
 import { prisma } from '@/lib/db'
 
 // GET - Get single student
-async function getHandler(req: any, { params }: { params: { id: string } }) {
+async function getHandler(req: AuthenticatedRequest) {
   try {
+    const url = new URL(req.url)
+    const id = url.pathname.split('/').pop()
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Student ID is required' }, { status: 400 })
+    }
+
     const student = await prisma.student.findUnique({
-      where: { id: parseInt(params.id) },
+      where: { id: parseInt(id) },
       include: {
         user: {
           select: {
@@ -33,13 +40,20 @@ async function getHandler(req: any, { params }: { params: { id: string } }) {
 }
 
 // PUT - Update student
-async function putHandler(req: any, { params }: { params: { id: string } }) {
+async function putHandler(req: AuthenticatedRequest) {
   try {
+    const url = new URL(req.url)
+    const id = url.pathname.split('/').pop()
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Student ID is required' }, { status: 400 })
+    }
+
     const body = await req.json()
     const { fullName, rollNo, class: className, department, mobile, status } = body
 
     const student = await prisma.student.findUnique({
-      where: { id: parseInt(params.id) },
+      where: { id: parseInt(id) },
       include: { user: true }
     })
 
@@ -49,7 +63,7 @@ async function putHandler(req: any, { params }: { params: { id: string } }) {
 
     // Update student and user
     const updatedStudent = await prisma.student.update({
-      where: { id: parseInt(params.id) },
+      where: { id: parseInt(id) },
       data: {
         rollNo: rollNo || student.rollNo,
         class: className || student.class,
@@ -85,10 +99,17 @@ async function putHandler(req: any, { params }: { params: { id: string } }) {
 }
 
 // DELETE - Delete student
-async function deleteHandler(req: any, { params }: { params: { id: string } }) {
+async function deleteHandler(req: AuthenticatedRequest) {
   try {
+    const url = new URL(req.url)
+    const id = url.pathname.split('/').pop()
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Student ID is required' }, { status: 400 })
+    }
+
     const student = await prisma.student.findUnique({
-      where: { id: parseInt(params.id) },
+      where: { id: parseInt(id) },
       include: { user: true }
     })
 
@@ -114,4 +135,3 @@ async function deleteHandler(req: any, { params }: { params: { id: string } }) {
 export const GET = requireAuth(getHandler)
 export const PUT = requireAuth(putHandler)
 export const DELETE = adminOnly(deleteHandler) // Only admin can delete
-

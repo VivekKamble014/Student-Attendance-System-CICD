@@ -69,7 +69,7 @@ async function postHandler(req: any) {
           return prisma.attendance.update({
             where: { id: existing.id },
             data: {
-              status: item.status.toUpperCase(),
+              status: item.status.toUpperCase() as 'PRESENT' | 'ABSENT',
               remarks: item.remarks || null
             }
           })
@@ -80,7 +80,7 @@ async function postHandler(req: any) {
               studentId: item.studentId,
               teacherId: teacherId!,
               date: new Date(date),
-              status: item.status.toUpperCase(),
+              status: item.status.toUpperCase() as 'PRESENT' | 'ABSENT',
               remarks: item.remarks || null
             }
           })

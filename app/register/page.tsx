@@ -19,7 +19,7 @@ export default function RegisterPage() {
   })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [passwordStrength, setPasswordStrength] = useState({ level: '', text: '', width: '0%' })
+  const [passwordStrength, setPasswordStrength] = useState({ level: '', text: '', width: '0%', color: '#6c757d' })
   const [departments, setDepartments] = useState<any[]>([])
   const [classes, setClasses] = useState<any[]>([])
   const [loadingDepartments, setLoadingDepartments] = useState(true)
@@ -30,7 +30,7 @@ export default function RegisterPage() {
       const strength = calculatePasswordStrength(formData.password)
       setPasswordStrength(strength)
     } else {
-      setPasswordStrength({ level: '', text: '', width: '0%' })
+      setPasswordStrength({ level: '', text: '', width: '0%', color: '#6c757d' })
     }
   }, [formData.password])
 

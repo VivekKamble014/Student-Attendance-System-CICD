@@ -123,7 +123,7 @@ async function handler(req: any) {
 
       const attendancePercentage = totalRecords > 0 
         ? ((presentRecords / totalRecords) * 100).toFixed(2)
-        : 0
+        : '0'
 
       stats = {
         attendancePercentage: parseFloat(attendancePercentage),

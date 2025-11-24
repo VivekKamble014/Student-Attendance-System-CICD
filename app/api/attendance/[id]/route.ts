@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/middleware-api'
+import { requireAuth, AuthenticatedRequest } from '@/lib/middleware-api'
 import { prisma } from '@/lib/db'
 
 // PUT - Update attendance
-async function putHandler(req: any, { params }: { params: { id: string } }) {
+async function putHandler(req: AuthenticatedRequest) {
   try {
+    const url = new URL(req.url)
+    const id = url.pathname.split('/').pop()
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Attendance ID is required' }, { status: 400 })
+    }
+
     const body = await req.json()
     const { status, remarks } = body
 
     const attendance = await prisma.attendance.findUnique({
-      where: { id: parseInt(params.id) }
+      where: { id: parseInt(id) }
     })
 
     if (!attendance) {
@@ -17,7 +24,7 @@ async function putHandler(req: any, { params }: { params: { id: string } }) {
     }
 
     const updated = await prisma.attendance.update({
-      where: { id: parseInt(params.id) },
+      where: { id: parseInt(id) },
       data: {
         status: status ? status.toUpperCase() : attendance.status,
         remarks: remarks !== undefined ? remarks : attendance.remarks
@@ -45,10 +52,17 @@ async function putHandler(req: any, { params }: { params: { id: string } }) {
 }
 
 // DELETE - Delete attendance
-async function deleteHandler(req: any, { params }: { params: { id: string } }) {
+async function deleteHandler(req: AuthenticatedRequest) {
   try {
+    const url = new URL(req.url)
+    const id = url.pathname.split('/').pop()
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Attendance ID is required' }, { status: 400 })
+    }
+
     const attendance = await prisma.attendance.findUnique({
-      where: { id: parseInt(params.id) }
+      where: { id: parseInt(id) }
     })
 
     if (!attendance) {
@@ -56,7 +70,7 @@ async function deleteHandler(req: any, { params }: { params: { id: string } }) {
     }
 
     await prisma.attendance.delete({
-      where: { id: parseInt(params.id) }
+      where: { id: parseInt(id) }
     })
 
     return NextResponse.json({ message: 'Attendance record deleted successfully' })

@@ -16,7 +16,6 @@ export default function ToastProvider() {
       draggable
       pauseOnHover
       theme="light"
-      enableMultiContainer={false}
       style={{
         fontSize: '14px',
         zIndex: 9999,

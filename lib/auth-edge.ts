@@ -17,7 +17,7 @@ export interface TokenPayload {
 
 export async function generateTokenEdge(payload: TokenPayload): Promise<string> {
   const secretKey = getSecretKey()
-  const token = await new SignJWT(payload)
+  const token = await new SignJWT(payload as any)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')

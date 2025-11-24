@@ -114,7 +114,7 @@ export default function Home() {
               </p>
               <div className="d-flex flex-wrap gap-3">
                 <Button
-                  as={Link}
+                  as={Link as any}
                   href="/register"
                   size="lg"
                   style={{
@@ -130,7 +130,7 @@ export default function Home() {
                   <i className="bi bi-arrow-right ms-2"></i>
                 </Button>
                 <Button
-                  as={Link}
+                  as={Link as any}
                   href="/login"
                   variant="outline-light"
                   size="lg"
@@ -422,7 +422,7 @@ export default function Home() {
                 </p>
                 <div className="d-flex flex-wrap justify-content-center gap-3">
                   <Button
-                    as={Link}
+                    as={Link as any}
                     href="/register"
                     size="lg"
                     style={{
@@ -436,7 +436,7 @@ export default function Home() {
                     <i className="bi bi-arrow-right ms-2"></i>
                   </Button>
                   <Button
-                    as={Link}
+                    as={Link as any}
                     href="/login"
                     variant="outline-primary"
                     size="lg"
