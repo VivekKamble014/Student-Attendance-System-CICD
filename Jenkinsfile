@@ -6,7 +6,8 @@ pipeline {
         DOCKER_TAG = "${env.BUILD_NUMBER}"
         // Nexus Configuration
         NEXUS_REGISTRY = 'nexus.imcc.com:8082'
-        NEXUS_REPO = 'docker-hosted'
+        NEXUS_REPO = '2401084-vivek-kamble'
+        NEXUS_REPO_URL = 'https://nexus.imcc.com/repository/2401084-vivek-kamble/'
         // SonarQube Configuration
         SONAR_HOST_URL = 'http://sonarqube.imcc.com'
         SONAR_PROJECT_KEY = '2401084-Student-Attendance-System-CICD'
@@ -676,12 +677,13 @@ pipeline {
                             fi
                             
                             echo \${NEXUS_PASS} | docker login ${NEXUS_REGISTRY} -u \${NEXUS_USER} --password-stdin
-                            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}
-                            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:latest
-                            docker push ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}
-                            docker push ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:latest
+                            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${NEXUS_REGISTRY}/${NEXUS_REPO}/${DOCKER_IMAGE}:${DOCKER_TAG}
+                            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${NEXUS_REGISTRY}/${NEXUS_REPO}/${DOCKER_IMAGE}:latest
+                            docker push ${NEXUS_REGISTRY}/${NEXUS_REPO}/${DOCKER_IMAGE}:${DOCKER_TAG}
+                            docker push ${NEXUS_REGISTRY}/${NEXUS_REPO}/${DOCKER_IMAGE}:latest
                             
-                            echo "✅ Pushed to Nexus: ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}"
+                            echo "✅ Pushed to Nexus: ${NEXUS_REPO_URL}${DOCKER_IMAGE}:${DOCKER_TAG}"
+                            echo "📦 Repository URL: ${NEXUS_REPO_URL}"
                         """
                     }
                 }
@@ -716,15 +718,15 @@ pipeline {
                             
                             echo \${NEXUS_PASS} | docker login ${NEXUS_REGISTRY} -u \${NEXUS_USER} --password-stdin || true
                             
-                            docker pull ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG} 2>/dev/null || {
+                            docker pull ${NEXUS_REGISTRY}/${NEXUS_REPO}/${DOCKER_IMAGE}:${DOCKER_TAG} 2>/dev/null || {
                                 echo "⚠️ Using local image"
                             }
                             
                             sed -i 's|^    build:|    # build:|g; s|^      context:|      # context:|g; s|^      dockerfile:|      # dockerfile:|g' docker-compose.yml || true
                             if ! grep -q "^    image:" docker-compose.yml; then
-                                sed -i '/container_name: attendance_app/a\\    image: ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}' docker-compose.yml || true
+                                sed -i '/container_name: attendance_app/a\\    image: ${NEXUS_REGISTRY}/${NEXUS_REPO}/${DOCKER_IMAGE}:${DOCKER_TAG}' docker-compose.yml || true
                             else
-                                sed -i 's|^    image:.*|    image: ${NEXUS_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}|g' docker-compose.yml || true
+                                sed -i 's|^    image:.*|    image: ${NEXUS_REGISTRY}/${NEXUS_REPO}/${DOCKER_IMAGE}:${DOCKER_TAG}|g' docker-compose.yml || true
                             fi
                             
                             docker-compose up -d 2>/dev/null || docker compose up -d 2>/dev/null || {
