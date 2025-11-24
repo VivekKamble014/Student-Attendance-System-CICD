@@ -518,25 +518,41 @@ pipeline {
                                 echo ""
                                 
                                 # Run scanner (it will use sonar-project.properties and override with command-line params)
+                                echo "🚀 Executing SonarQube Scanner..."
+                                echo ""
+                                
                                 ${SCANNER_CMD} \
                                     -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                     -Dsonar.host.url=${SONAR_HOST_URL} \
-                                    -Dsonar.login=${SONAR_TOKEN}
+                                    -Dsonar.login=${SONAR_TOKEN} \
+                                    -Dsonar.projectName="Student Attendance Management System - ${SONAR_PROJECT_KEY}" \
+                                    -Dsonar.projectVersion=1.0.0 \
+                                    -Dsonar.sourceEncoding=UTF-8 \
+                                    -Dsonar.sources=app,components,lib,scripts \
+                                    -Dsonar.exclusions="**/node_modules/**,**/.next/**,**/dist/**,**/build/**,**/*.config.js,**/coverage/**,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx" \
+                                    -Dsonar.language=ts \
+                                    -Dsonar.typescript.tsconfigPath=tsconfig.json || {
+                                    echo ""
+                                    echo "❌ SonarQube analysis failed!"
+                                    echo "📋 Check the logs above for details"
+                                    exit 1
+                                }
                                 
                                 echo ""
+                                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                                 echo "✅ SonarQube analysis completed successfully!"
+                                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                                 echo ""
-                                echo "📊 ========================================"
-                                echo "📊 SonarQube Dashboard:"
-                                echo "📊 ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
-                                echo "📊 ========================================"
+                                echo "📊 Your project is now available on SonarQube!"
+                                echo "🔗 Dashboard URL: ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
+                                echo "🔗 Project Overview: ${SONAR_HOST_URL}/project/overview?id=${SONAR_PROJECT_KEY}"
                                 echo ""
-                                echo "🔍 Check the dashboard to see:"
-                                echo "   ✅ Quality Gate Status (Passed/Failed)"
-                                echo "   ✅ Code Quality Rating"
-                                echo "   ✅ Security Vulnerabilities"
-                                echo "   ✅ Code Smells"
-                                echo "   ✅ Bugs"
+                                echo "📋 Project Details:"
+                                echo "   • Project Key: ${SONAR_PROJECT_KEY}"
+                                echo "   • Project Name: Student Attendance Management System - ${SONAR_PROJECT_KEY}"
+                                echo "   • SonarQube Server: ${SONAR_HOST_URL}"
+                                echo ""
+                                echo "⏳ Waiting for Quality Gate results in next stage..."
                             '''
                         }
                     }
@@ -557,28 +573,40 @@ pipeline {
                     timeout(time: 5, unit: 'MINUTES') {
                         def qg = waitForQualityGate abortPipeline: false
                         echo ""
-                        echo "📊 ========================================"
-                        echo "📊 Quality Gate Result:"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                         if (qg.status == 'OK') {
-                            echo "✅ STATUS: PASSED ✅"
-                            echo "✅ Your code meets quality standards!"
+                            echo "✅ Quality Gate Status: PASSED ✅ 🎉"
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo ""
+                            echo "🎊 SUCCESS! Your project PASSED the Quality Gate!"
+                            echo ""
+                            echo "✅ Your code meets all quality standards!"
+                            echo ""
+                            echo "📊 View your project dashboard:"
+                            echo "   🔗 ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
+                            echo ""
+                            echo "📋 Project Overview:"
+                            echo "   🔗 ${SONAR_HOST_URL}/project/overview?id=${SONAR_PROJECT_KEY}"
+                            echo ""
+                            echo "✅ Your project is now visible on SonarQube with PASS status!"
+                            echo "   Just like the image you showed me! 🎯"
                         } else if (qg.status == 'ERROR') {
-                            echo "❌ STATUS: FAILED ❌"
-                            echo "⚠️ Your code does not meet quality standards"
+                            echo "❌ Quality Gate Status: FAILED ❌"
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo ""
+                            echo "⚠️  Your code does not meet quality standards"
+                            echo ""
+                            echo "📊 View details at:"
+                            echo "   🔗 ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
+                            echo ""
+                            echo "📋 Check the Issues tab to see what needs to be fixed"
                         } else {
-                            echo "⚠️ STATUS: ${qg.status}"
+                            echo "⚠️  Quality Gate Status: ${qg.status}"
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo ""
+                            echo "📊 View details at:"
+                            echo "   🔗 ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
                         }
-                        echo "📊 ========================================"
-                        echo ""
-                        echo "🔗 View full details:"
-                        echo "   ${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
-                        echo ""
-                        echo "📋 You can see:"
-                        echo "   • Quality Gate: Passed ✅ or Failed ❌"
-                        echo "   • Reliability Rating: A, B, C, D, or E"
-                        echo "   • Security Rating: A, B, C, D, or E"
-                        echo "   • Maintainability Rating: A, B, C, D, or E"
-                        echo "   • Code Smells, Bugs, Vulnerabilities"
                         echo ""
                     }
                 }
