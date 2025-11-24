@@ -264,9 +264,9 @@ pipeline {
                             else
                                 echo "⚠️ Could not switch Node.js version, trying to find installed version..."
                                 nvm ls
-                                # Try to use any installed version
-                                INSTALLED_VERSION=$(nvm ls --no-colors | grep -E "v[0-9]+\.[0-9]+\.[0-9]+" | head -1 | tr -d ' ' | tr -d '->' | tr -d '*')
-                                if [ -n "$INSTALLED_VERSION" ]; then
+                                # Try to use any installed version (avoid complex regex to prevent Groovy parsing issues)
+                                INSTALLED_VERSION=$(nvm ls --no-colors 2>/dev/null | grep 'v' | grep -v 'N/A' | head -1 | awk '{print $1}' | tr -d '->' | tr -d '*')
+                                if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" != "default" ]; then
                                     nvm use "$INSTALLED_VERSION" 2>/dev/null || true
                                 fi
                             fi
