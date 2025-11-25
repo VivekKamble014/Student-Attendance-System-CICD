@@ -47,12 +47,22 @@ pipeline {
                         
                         # Check if node is already available
                         if command -v node &> /dev/null; then
-                            NODE_VERSION=\$(node --version 2>/dev/null || echo "")
-                            if echo "\$NODE_VERSION" | grep -q "v18"; then
-                                NODE_BIN=\$(command -v node)
-                                NPM_BIN=\$(command -v npm)
-                                NPX_BIN=\$(command -v npx)
-                                echo "✅ Node.js already available: \$NODE_VERSION"
+                            NODE_BIN=\$(command -v node)
+                            if [ -x "\$NODE_BIN" ]; then
+                                NODE_VERSION=\$("\$NODE_BIN" --version 2>/dev/null || echo "")
+                                if echo "\$NODE_VERSION" | grep -q "v18"; then
+                                    NPM_BIN=\$(command -v npm 2>/dev/null || echo "")
+                                    NPX_BIN=\$(command -v npx 2>/dev/null || echo "")
+                                    if [ -n "\$NPM_BIN" ] && [ -x "\$NPM_BIN" ]; then
+                                        echo "✅ Node.js already available: \$NODE_VERSION"
+                                    else
+                                        # Node found but npm not found, will reinstall
+                                        NODE_BIN=""
+                                    fi
+                                else
+                                    # Node found but wrong version, will reinstall
+                                    NODE_BIN=""
+                                fi
                             fi
                         fi
                         
