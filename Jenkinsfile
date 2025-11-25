@@ -38,72 +38,109 @@ pipeline {
                 echo '✅ Running validation checks...'
                 script {
                 sh '''
-                        set -e
-                        
                         # ============================================
                         # Install Node.js 18 if not available
                         # ============================================
-                        if ! command -v node &> /dev/null || ! node --version 2>/dev/null | grep -q "v18"; then
+                        NODE_BIN=""
+                        NPM_BIN=""
+                        NPX_BIN=""
+                        
+                        # Check if node is already available
+                        if command -v node &> /dev/null; then
+                            NODE_VERSION=\$(node --version 2>/dev/null || echo "")
+                            if echo "\$NODE_VERSION" | grep -q "v18"; then
+                                NODE_BIN=\$(command -v node)
+                                NPM_BIN=\$(command -v npm)
+                                NPX_BIN=\$(command -v npx)
+                                echo "✅ Node.js already available: \$NODE_VERSION"
+                            fi
+                        fi
+                        
+                        # Install Node.js if not found
+                        if [ -z "\$NODE_BIN" ]; then
                             echo "📦 Installing Node.js 18..."
-                            export NVM_DIR="${HOME}/.nvm"
-                            if [ ! -d "$NVM_DIR" ]; then
+                            export NVM_DIR="\${HOME}/.nvm"
+                            if [ ! -d "\$NVM_DIR" ]; then
                                 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash 2>/dev/null || true
                             fi
-                            if [ -s "$NVM_DIR/nvm.sh" ]; then
-                                . "$NVM_DIR/nvm.sh"
+                            if [ -s "\$NVM_DIR/nvm.sh" ]; then
+                                . "\$NVM_DIR/nvm.sh"
                                 nvm install 18 2>/dev/null || nvm install --lts 2>/dev/null || true
                                 nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || true
                             fi
+                            
+                            # Setup Node.js environment
+                            if [ -d "\$HOME/.nvm" ]; then
+                                export NVM_DIR="\$HOME/.nvm"
+                                if [ -s "\$NVM_DIR/nvm.sh" ]; then
+                                    . "\$NVM_DIR/nvm.sh"
+                                    nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || nvm use default 2>/dev/null || true
+                                fi
+                            fi
+                            
+                            # Find Node.js using direct path
+                            if [ -x "\$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
+                                export PATH="\$HOME/.nvm/versions/node/v18.20.8/bin:\$PATH"
+                                NODE_BIN="\$HOME/.nvm/versions/node/v18.20.8/bin/node"
+                                NPM_BIN="\$HOME/.nvm/versions/node/v18.20.8/bin/npm"
+                                NPX_BIN="\$HOME/.nvm/versions/node/v18.20.8/bin/npx"
+                            elif [ -d "\$HOME/.nvm/versions/node" ]; then
+                                FOUND_NODE=\$(find "\$HOME/.nvm/versions/node" -name "node" -type f -executable 2>/dev/null | head -1)
+                                if [ -n "\$FOUND_NODE" ]; then
+                                    NODE_DIR=\$(dirname "\$FOUND_NODE")
+                                    export PATH="\$NODE_DIR:\$PATH"
+                                    NODE_BIN="\$FOUND_NODE"
+                                    NPM_BIN="\$NODE_DIR/npm"
+                                    NPX_BIN="\$NODE_DIR/npx"
+                                fi
+                            fi
+                            
+                            # Refresh command cache
+                            hash -r 2>/dev/null || true
                         fi
                         
-                        # Setup Node.js environment
-                        export PATH=$PATH:/usr/bin:/usr/local/bin
-                        if [ -d "$HOME/.nvm" ]; then
-                            export NVM_DIR="$HOME/.nvm"
-                            if [ -s "$NVM_DIR/nvm.sh" ]; then
-                                . "$NVM_DIR/nvm.sh"
-                                nvm use 18 2>/dev/null || nvm use --lts 2>/dev/null || nvm use default 2>/dev/null || true
+                        # Verify Node.js is available using direct path
+                        if [ -z "\$NODE_BIN" ] || [ ! -x "\$NODE_BIN" ]; then
+                            # Try one more time with command -v after hash refresh
+                            if command -v node &> /dev/null; then
+                                NODE_BIN=\$(command -v node)
+                                NPM_BIN=\$(command -v npm)
+                                NPX_BIN=\$(command -v npx)
+                            else
+                                echo "❌ ERROR: Node.js is not available!"
+                                echo "   Attempted installation but failed"
+                                echo "   Please ensure Node.js 18+ is installed on Jenkins agent"
+                                exit 1
                             fi
                         fi
                         
-                        # Find Node.js using direct path
-                        if [ -x "$HOME/.nvm/versions/node/v18.20.8/bin/node" ]; then
-                            export PATH="$HOME/.nvm/versions/node/v18.20.8/bin:$PATH"
-                        elif [ -d "$HOME/.nvm/versions/node" ]; then
-                            FOUND_NODE=\$(find "$HOME/.nvm/versions/node" -name "node" -type f -executable 2>/dev/null | head -1)
-                            if [ -n "$FOUND_NODE" ]; then
-                                export PATH="\$(dirname \$FOUND_NODE):\$PATH"
-                            fi
-                        fi
-                        
-                        if ! command -v node &> /dev/null; then
-                            echo "❌ ERROR: Node.js is not available!"
-                            echo "   Attempted installation but failed"
-                            echo "   Please ensure Node.js 18+ is installed on Jenkins agent"
+                        # Verify Node.js works
+                        if ! "\$NODE_BIN" --version &> /dev/null; then
+                            echo "❌ ERROR: Node.js binary found but not working!"
                             exit 1
                         fi
                         
-                        echo "✅ Node.js: \$(node --version)"
-                        echo "✅ npm: \$(npm --version)"
+                        echo "✅ Node.js: \$(\$NODE_BIN --version)"
+                        echo "✅ npm: \$(\$NPM_BIN --version)"
                         
                         # Install Dependencies
                         echo "📦 Installing dependencies..."
                         if [ -f "package-lock.json" ]; then
-                            npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
+                            "\$NPM_BIN" ci --prefer-offline --no-audit || "\$NPM_BIN" install --prefer-offline --no-audit
                         else
-                            npm install --prefer-offline --no-audit
+                            "\$NPM_BIN" install --prefer-offline --no-audit
                         fi
                         
                         # Generate Prisma Client
                         echo "🔧 Generating Prisma Client..."
-                        npx prisma generate || {
+                        "\$NPX_BIN" prisma generate || {
                             echo "⚠️ Prisma generate failed, but continuing..."
                             echo "   This may cause issues in the application"
                         }
                         
                         # Run Lint
                         echo "🔍 Running linter..."
-                        npm run lint || {
+                        "\$NPM_BIN" run lint || {
                             echo "⚠️ Linter found issues, but continuing build..."
                         }
                         
@@ -285,7 +322,7 @@ pipeline {
                 }
             }
         }
-        
+
         // Stage 7b: Create Registry Secret (separate stage for withCredentials)
         stage('Create Registry Secret') {
             when {
@@ -317,7 +354,7 @@ pipeline {
                 }
             }
         }
-        
+
         // Stage 7c: Create Application Secrets
         stage('Create Application Secrets') {
             when {
